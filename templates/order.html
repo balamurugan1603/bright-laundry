@@ -436,9 +436,9 @@
         </div>
 
         {% autoescape off %}
-        <button onclick="sendWhatsApp('{{ order_id }}', '{{ customer_name }}', '{{ phone_number }}', '{{ total_amount }}', {{ order_details | tojson }}, '{{ branch }}')">
+        <button onclick="sendWhatsApp('{{ order_id }}', '{{ customer_name|escape }}', '{{ phone_number|escape }}', '{{ total_amount }}', '{{ order_details | tojson | replace('"', '\'') | replace('\'', '\\\'') }}', '{{ branch|escape }}')">
             Send via WhatsApp
-        </button>
+        </button>        
         {% endautoescape %}
     </div>
 
@@ -464,6 +464,7 @@
         function sendWhatsApp(orderId, customerName, phoneNumber, totalAmount, orderDetails, branch) {
             let message = `Hello ${customerName},\n\nHere is your bill for Order ID: ${orderId}:\n\n`;
 
+            orderDetails = JSON.parse(orderDetails.replace(/'/g, '"'));
             orderDetails.forEach(detail => {
                 message += `${detail['Cloth Type']}: ${detail['Quantity']} x ₹${detail['Price per Piece']} = ₹${detail['Total']}\n`;
             });

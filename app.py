@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, send_file, jsonify
+from flask import Flask, render_template, request, redirect, url_for, send_file, jsonify, session
 import pandas as pd
 import os
 from datetime import datetime
@@ -6,6 +6,7 @@ import smtplib
 from email.message import EmailMessage
 
 app = Flask(__name__)
+app.secret_key = os.urandom(24)
 
 # This will store the last 10 bills in memory (replace with a database for persistence)
 
@@ -88,8 +89,8 @@ def manage_old_files():
 
 # Home page route
 @app.route('/')
-def home():
-    return render_template('index1.html')
+def customer_info():
+    return render_template('get_customer_info.html')
 
 # Start the day route
 @app.route('/start_day', methods=['POST'])
@@ -117,22 +118,26 @@ def start_day():
             df_monthly = pd.DataFrame(columns=['Date', 'Reference Number', 'Customer Name', 'Phone Number', 'Branch', 'Cloth Type', 'Quantity', 'Total Price', 'Status', 'Timestamp'])
             df_monthly.to_excel(monthly_excel_file, index=False)
 
-        return redirect(url_for('get_customer_info'))
+        return redirect(url_for('order_page'))
     
     return redirect(url_for('manage_orders'))
 
 
-@app.route('/get_customer_info', methods=['GET'])
-def get_customer_info():
-    return render_template('start_day.html')
+@app.route('/details_submit', methods=['POST'])
+def home():
+    # Retrieve customer details if available    
+    customer_name = request.form.get('customer_name')
+    phone_number = request.form.get('phone_number')
+
+    # Store details in session
+    session['customer_name'] = customer_name
+    session['phone_number'] = phone_number
+
+    return render_template('index1.html')
 
 
 @app.route('/order_page', methods=['GET', 'POST'])
 def order_page():
-    # Retrieve customer details if available
-    customer_name = request.form.get('customer_name')
-    phone_number = request.form.get('phone_number')
-    
     # Initialize summary totals and other variables as before
     summary_totals = {
         'Ironing - Shirts & Pants': 0,
@@ -156,13 +161,21 @@ def order_page():
     order_details = []  # Initialize as an empty list by default
     whatsapp_message = ""  # Placeholder for WhatsApp message
 
+    customer_name = session.get('customer_name')
+    phone_number = session.get('phone_number')
+    print(phone_number)
+
     # Load today's data from file if it exists
     today_excel_file = get_today_excel_file(current_date)
-    
+    order_id = None
+    branch = None
+
     if os.path.exists(today_excel_file):
         df_today = pd.read_excel(today_excel_file)
-        df_today = df_today[df_today["Phone Number"] == phone_number]
-        
+        df_today = df_today[df_today["Customer Name"] == str(customer_name)]
+        order_id = df_today.head(1)['Reference Number'].values[0]
+        branch = df_today.head(1)['Branch'].values[0]
+
         # Calculate totals and populate `order_details`
         for cloth_type in summary_totals.keys():
             total_quantity = df_today[df_today['Cloth Type'] == cloth_type]['Quantity'].sum()
@@ -214,7 +227,9 @@ def order_page():
         order_details=order_details if order_details else None,
         whatsapp_message=whatsapp_message,
         customer_name=customer_name,
-        phone_number=phone_number
+        phone_number=phone_number,
+        order_id=order_id,
+        branch=branch
     )
 
 # Add order route
